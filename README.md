@@ -2,7 +2,7 @@
 
 ### Main catur dulu, ngodingnya belakangan
 
-- 🌱 I'm currently learning **Flask dan Nodejs**
+- 🌱 I'm currently learning **Flask and Nodejs**
 
 - ⚡ Fun fact **Suka ngoding, catur, dan suka makan sate**
 
