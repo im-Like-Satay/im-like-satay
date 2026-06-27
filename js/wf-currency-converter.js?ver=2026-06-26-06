@@ -1,0 +1,589 @@
+
+let isSinglePage = document.getElementsByClassName("currency-items-wrapper")[0].getAttribute('data-is-currencypair');
+/**
+ * Send selector
+ */
+function openCurrencySelectorSend(){
+
+    const currencyOptionsRecieve = document.getElementById("currency-options--receive");
+
+    var classTest = currencyOptionsRecieve.classList.contains("open");
+
+    if(classTest){
+        currencyOptionsRecieve.classList.remove('open');
+        $('#currency-selector--receive').parents('.cc-money-input').removeClass('red_border');
+        $('.currency-option--receieve').removeClass('focused');
+
+        $('#currency-options-search--receive').val('');
+        filterFunctionReceive();
+    }
+
+    const currencyOptionsSend = document.getElementById("currency-options--send");
+
+    var classTest = currencyOptionsSend.classList.contains("open");
+
+    if(classTest){
+        currencyOptionsSend.classList.remove('open');
+        $('#currency-selector--send').parents('.cc-money-input').removeClass('red_border');
+
+        $('.currency-option--send').removeClass('focused');
+    } else {
+        currencyOptionsSend.classList.add('open');
+        $('#currency-selector--send').parents('.cc-money-input').addClass('red_border');
+    }
+
+    $('#currency-options-search--send').focus();
+}
+
+
+/**
+ * Receive selector
+ */
+function openCurrencySelectorReceive(){
+
+    const currencyOptionsSend = document.getElementById("currency-options--send");
+
+    var classTest = currencyOptionsSend.classList.contains("open");
+
+    if(classTest){
+        currencyOptionsSend.classList.remove('open');
+        $('#currency-selector--send').parents('.cc-money-input').removeClass('red_border');
+        $('.currency-option--send').removeClass('focused');
+
+        $('#currency-options-search--send').val('');
+        filterFunction();
+    }
+
+    const currencyOptionsRecieve = document.getElementById("currency-options--receive");
+
+    var classTest = currencyOptionsRecieve.classList.contains("open");
+
+    if(classTest){
+        currencyOptionsRecieve.classList.remove('open');
+        $('#currency-selector--receive').parents('.cc-money-input').removeClass('red_border');
+
+        $('.currency-option--receieve').removeClass('focused');
+    } else {
+        currencyOptionsRecieve.classList.add('open');
+        $('#currency-selector--receive').parents('.cc-money-input').addClass('red_border');
+    }
+
+    $('#currency-options-search--receive').focus();
+}
+
+/**
+ *
+ */
+const receiveCurrency = document.getElementById('currency-selector--receive').getAttribute('data-currency');
+const sendCurrency    = document.getElementById('currency-selector--send').getAttribute('data-currency');
+const sendAmount      = document.getElementById("source-input");
+
+
+/**
+ * Sell Currency
+ */
+const sendCurrencyOptions = document.querySelectorAll('.currency-option--send');
+sendCurrencyOptions.forEach(sendCurrencyOption => {
+    sendCurrencyOption.addEventListener('click', function handleClick(event) {
+
+        let getSendAmount = removeCommas(sendAmount.value);
+        let sendCurrencySelected = sendCurrencyOption.getAttribute('data-currency').toLowerCase();
+        let receiveCurrencySelect = document.getElementById('currency-selector--receive').getAttribute('data-currency').toLowerCase();
+        const sendCurrencyParentSlug = sendCurrencyOption.getAttribute('data-parent-slug').toLowerCase();
+
+        event.preventDefault();
+
+        // Don't do anything if the current currency is selected
+        const ccQueryString = window.location.search;
+        const ccUrlParams = new URLSearchParams(ccQueryString);
+        const sellCurrencyParams = ccUrlParams.get('send');
+        if(sellCurrencyParams == sendCurrencySelected){
+            return;
+        }
+
+        redirectToNewUrl( 3, sendCurrencySelected, receiveCurrencySelect, getSendAmount, sendCurrencyParentSlug);
+    });
+});
+
+/**
+ * Buy Currency
+ */
+const receiveCurrencyOptions = document.querySelectorAll('.currency-option--receieve');
+receiveCurrencyOptions.forEach(receiveCurrencyOption => {
+    receiveCurrencyOption.addEventListener('click', function handleClick(event) {
+
+        let getSendAmount = removeCommas(sendAmount.value);
+        let recieveCurrencySelected = receiveCurrencyOption.getAttribute('data-currency').toLowerCase();
+        let sendCurrencySelected = document.getElementById('currency-selector--send').getAttribute('data-currency').toLowerCase();
+
+        event.preventDefault();
+
+        // Don't do anything if the current currency is selected
+        const ccQueryString = window.location.search;
+        const ccUrlParams = new URLSearchParams(ccQueryString);
+        const buyCurrencyParams = ccUrlParams.get('receive');
+        if(buyCurrencyParams == recieveCurrencySelected){
+            return;
+        }
+
+        redirectToNewUrl(2, sendCurrencySelected, recieveCurrencySelected, getSendAmount);
+
+    });
+});
+
+/**
+ * Currency switcher
+ */
+function currencyConverterInputSwitcher() {
+    let newBuyCurrency  = document.getElementById('currency-selector--send').getAttribute('data-currency').toLowerCase();
+    let newSellCurrency = document.getElementById('currency-selector--receive').getAttribute('data-currency').toLowerCase();
+    let getSendAmount   = removeCommas(sendAmount.value);
+
+    redirectToNewUrl(2, newSellCurrency, newBuyCurrency, getSendAmount);
+
+}
+
+/**
+ * Page Redirect/ Reload Function
+ */
+function redirectToNewUrl(newPath, sendCurrencySelected, receiveCurrencySelect, getSendAmount, sendCurrencyParentSlug) {
+    let url = window.location.href;
+    if(isSinglePage)
+    {
+        let urlParts = url.split('/');
+        let updatedPath = urlParts.slice(0, urlParts.length - newPath).join('/') + '/';
+
+        // Create the new URL structure
+        let newUrl = updatedPath + sendCurrencyParentSlug + '/' + sendCurrencySelected + '-' + receiveCurrencySelect + '/';
+
+        // Add the send and receive parameters
+        newUrl += '?send=' + sendCurrencySelected + '&receive=' + receiveCurrencySelect + '&amount=' + getSendAmount;
+
+        // 如果设置了isRedirect就重载页面
+        if(typeof isRedirect !== 'undefined') {
+            window.location = newUrl;
+        }else{
+            changeRateData(url.split('?')[0], sendCurrencySelected, receiveCurrencySelect, getSendAmount, newPath);
+        }
+    }else
+    {
+        let claenurl = url.split('?')[0];
+
+        // 如果设置了isRedirect就重载页面
+        if(typeof isRedirect !== 'undefined') {
+            window.location=claenurl + '?send='+sendCurrencySelected + '&receive=' + receiveCurrencySelect + '&amount='+getSendAmount;
+        }else{
+            changeRateData(claenurl, sendCurrencySelected, receiveCurrencySelect, getSendAmount, newPath);
+        }
+    }
+
+}
+
+function changeRateData(claenurl, sendCurrencySelected, receiveCurrencySelect, getSendAmount, newPath) {
+    // 修改当前url路径
+    let redirectUrl = claenurl + '?send='+sendCurrencySelected + '&receive=' + receiveCurrencySelect + '&amount='+getSendAmount;
+    window.history.replaceState({},"",redirectUrl);
+
+    // 判断是否可以兑换
+    let beSvg = '<svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 384 512"><!--! Font Awesome Free 6.4.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2023 Fonticons, Inc. --><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg>';
+    if(!checkPairs(sendCurrencySelected,receiveCurrencySelect,newPath)){
+        let currencyPairsError = document.getElementById("currency-pairs-error");
+        if(currencyPairsError=="" || !currencyPairsError) {
+            let currency_pairs_error = '<div id="currency-pairs-error"><span class="pairs-warnings">' + beSvg + '</span><p>Sorry, we currently do not support this pairing at this time.</p></div>';
+            
+            let parent = document.querySelector('.cc-module-wrap');
+            if(parent) {
+                let calculator = document.querySelector('.cc-calculator');
+                calculator.insertAdjacentHTML('afterend', currency_pairs_error);
+                let loader = document.getElementById("loading");
+                let xrBuyAmount = document.getElementById("xr-buy-amount");
+                let ccexRate = document.querySelector(".ccex-rate");
+                let ccDisclaimer = document.querySelector(".cc-disclaimer");
+
+                loader.classList.remove("display");
+                xrBuyAmount.classList.remove("hidden");
+                ccexRate.classList.add("c-grey");
+                ccDisclaimer.style.display = "none";
+                document.getElementById("receive-input").value = "0.00";
+                document.getElementById("xr-buy-amount").textContent= "0.00";
+
+                let pairError = document.querySelector('.pairs-warnings svg');
+
+                if( pairError ) {
+                    pairError.addEventListener("click", function(event){
+                        document.getElementById("currency-pairs-error").remove();
+                    });
+                }
+            }
+        }
+    }else{
+        // 存在币种对
+        let currencyPairsError = document.getElementById("currency-pairs-error");
+        if(currencyPairsError) {
+            currencyPairsError.remove();
+        }
+        let parent = document.querySelector('.cc-module-wrap');
+        if(parent) {
+            let secondChild = parent.children[0];
+            if(secondChild) {
+                let ccexRate = document.querySelector(".ccex-rate");
+                let ccDisclaimer = document.querySelector(".cc-disclaimer");
+
+                ccexRate.classList.remove("c-grey");
+                ccDisclaimer.style.display = "block";
+            }
+        }
+    }
+
+    // 修改currency-option--receive
+    let pairsArrayList = localStorage.getItem('__pairsArray');
+    let receiveArr = [];
+    if(pairsArrayList !== null) {
+        let pairsArrayArray = JSON.parse(pairsArrayList);
+        let filteredStr = sendCurrencySelected.toUpperCase() + " to ";
+        let filteredList = pairsArrayArray.filter(item => item.startsWith(filteredStr));
+    
+        filteredList.map(item => {
+            let match = item.match(/to\s(\w+)$/);
+            if (match) {
+                receiveArr.push(match[1]); // 返回匹配到的最后一个字符
+            }
+        })
+    }
+
+    var outputHtml = '';
+    receiveArr.forEach((item, index) => {
+        var sendEle = document.querySelector('.currency-option--send[data-currency="'+ item +'"]');
+        if(sendEle) {
+            // 处理receive的国旗列表
+            outputHtml += '<a class="currency-option--receieve" href="javascript:void(0);" data-currency="' + item +'">';
+            outputHtml += '<img decoding="async" src="'+ getFlagUrl(item) + '" class="flag-img" alt="'+ item +'">' + item;
+            outputHtml += '<span class="cc-country-name">'+ sendEle.querySelector('.cc-country-name').textContent +'</span>';
+            outputHtml += '</a>\n';
+        }
+        
+    })
+    var receiveParentDiv = document.getElementById('currency-options--receive').querySelector('.currency-items-wrapper');
+    receiveParentDiv.innerHTML= outputHtml;
+
+
+    // 重新绑定事件
+    let receiveCurrencyOptions = document.querySelectorAll('.currency-option--receieve');
+    receiveCurrencyOptions.forEach(receiveCurrencyOption => {
+        receiveCurrencyOption.addEventListener('click', function handleClick(event) {
+
+            let getSendAmount = removeCommas(sendAmount.value);
+            let recieveCurrencySelected = receiveCurrencyOption.getAttribute('data-currency').toLowerCase();
+            let sendCurrencySelected = document.getElementById('currency-selector--send').getAttribute('data-currency').toLowerCase();
+
+            event.preventDefault();
+
+            // Don't do anything if the current currency is selected
+            let ccQueryString = window.location.search;
+            let ccUrlParams = new URLSearchParams(ccQueryString);
+            let buyCurrencyParams = ccUrlParams.get('receive');
+            if(buyCurrencyParams == recieveCurrencySelected){
+                return;
+            }
+
+            redirectToNewUrl(2, sendCurrencySelected, recieveCurrencySelected, getSendAmount);
+        });
+    });
+    // end 重新绑定事件
+
+    // 修改选中国家
+    setFlagData(sendCurrencySelected,receiveCurrencySelect,newPath);
+    
+
+    // 修改汇率
+    let hasCurrencyPairsError = document.getElementById('currency-pairs-error');
+
+    if (!hasCurrencyPairsError) {
+        _rateListenersBound = false;
+        buildCallData();
+        (async function() {
+            try {
+                const currentInquiry = await getInquiry;
+                if (currentInquiry && currentInquiry.rateList && currentInquiry.rateList[0]) {
+                    applyRateAndBindListeners(currentInquiry.rateList[0].rate);
+                }
+            } catch (e) {
+                if (window.console && window.console.error) {
+                    console.error('Currency converter rate error:', e);
+                }
+            }
+        })();
+    }
+
+
+}
+
+function getFlagUrl(currency) {
+    let selector_send_img_src = document.getElementById('currency-selector--send').querySelector('img').src;
+    let selector_send_img_src_arr = selector_send_img_src.split("/-_");
+    let svg_img_src='';
+    if(selector_send_img_src_arr.length>0) {
+        svg_img_src = selector_send_img_src_arr[0]+ '/-_' + currency + '.svg';
+    }
+
+    return svg_img_src;
+}
+
+function checkPairs(sendCurrencySelected,receiveCurrencySelect,newPath) {
+    let __pairsArray = JSON.parse(localStorage.getItem('__pairsArray'));
+    let send_receive = sendCurrencySelected.toUpperCase() + ' to ' + receiveCurrencySelect.toUpperCase();
+    if(__pairsArray !== null && __pairsArray.includes(send_receive)) {
+        return true;
+    }else{
+        return false;
+    }
+
+}
+
+function setFlagData(sendCurrencySelected,receiveCurrencySelect,newPath) {
+    if(newPath== 3) {
+        // send
+        var send_flag_img = document.getElementById('currency-options--send');
+        var send_a = send_flag_img.getElementsByTagName('a');
+
+        // 将imgs转换为数组，以便于操作
+        var sendA = Array.from(send_a);
+
+        sendA.forEach(function(a) {
+            if(a.getAttribute('data-currency').toLowerCase() == sendCurrencySelected) {
+                document.getElementById("currency-selector--send").querySelector("img.dropbtn-img").src = getFlagUrl(a.getAttribute('data-currency'));
+                document.getElementById("currency-selector--send").setAttribute("data-currency", a.getAttribute('data-currency'));
+                document.getElementById("currency-selector--send").querySelector("img.dropbtn-img").alt = a.getAttribute('data-currency'); 
+                document.getElementById("currency-selector--send").querySelector("span.dropbtn-span").textContent = a.getAttribute('data-currency'); 
+            }
+        });
+
+        document.getElementById('xr-sell-currency').textContent = sendCurrencySelected.toUpperCase();
+    }else if(newPath== 2) {
+        // send
+        var send_flag_img = document.getElementById('currency-options--send');
+        var send_a = send_flag_img.getElementsByTagName('a');
+
+        // 将imgs转换为数组，以便于操作
+        var sendA = Array.from(send_a);
+
+        sendA.forEach(function(a) {
+            if(a.getAttribute('data-currency').toLowerCase() == sendCurrencySelected) {
+                document.getElementById("currency-selector--send").querySelector("img.dropbtn-img").src = getFlagUrl(a.getAttribute('data-currency'));
+                document.getElementById("currency-selector--send").setAttribute("data-currency", a.getAttribute('data-currency'));
+                document.getElementById("currency-selector--send").querySelector("img.dropbtn-img").alt = a.getAttribute('data-currency'); 
+                document.getElementById("currency-selector--send").querySelector("span.dropbtn-span").textContent = a.getAttribute('data-currency'); 
+            }
+        });
+
+        document.getElementById('xr-sell-currency').textContent = sendCurrencySelected.toUpperCase();
+        // receive
+        // var receive_flag_img = document.getElementById('currency-options--receive');
+        // var receive_a = receive_flag_img.getElementsByTagName('a');
+        
+        // // 将imgs转换为数组，以便于操作
+        // var receiveA = Array.from(receive_a);
+        
+        // 例如，遍历所有img
+        sendA.forEach(function(a_r) {
+            if(a_r.getAttribute('data-currency').toLowerCase() == receiveCurrencySelect) {
+                document.getElementById("currency-selector--receive").querySelector("img.dropbtn-img").src = getFlagUrl(a_r.getAttribute('data-currency'));
+                document.getElementById("currency-selector--receive").setAttribute("data-currency", a_r.getAttribute('data-currency'));
+                document.getElementById("currency-selector--receive").querySelector("img.dropbtn-img").alt = a_r.getAttribute('data-currency'); 
+                document.getElementById("currency-selector--receive").querySelector("span.dropbtn-span").textContent = a_r.getAttribute('data-currency'); 
+            }
+        });
+        document.getElementById('xr-buy-currency').textContent = receiveCurrencySelect.toUpperCase();
+    }
+}
+/**
+ * Search Filter
+ */
+function filterFunction() {
+    var input, filter, ul, li, a, i;
+    input = document.getElementById("currency-options-search--send");
+    filter = input.value.toUpperCase();
+    div = document.getElementById("currency-options--send");
+    a = div.getElementsByTagName("a");
+    for (i = 0; i < a.length; i++) {
+        txtValue = a[i].textContent || a[i].innerText;
+        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+            a[i].style.display = "";
+        } else {
+            a[i].style.display = "none";
+        }
+    }
+}
+
+/**
+ * Search Filter - Receive
+ */
+function filterFunctionReceive() {
+    var input, filter, ul, li, a, i;
+    input = document.getElementById("currency-options-search--receive");
+    filter = input.value.toUpperCase();
+    div = document.getElementById("currency-options--receive");
+    a = div.getElementsByTagName("a");
+    for (i = 0; i < a.length; i++) {
+        txtValue = a[i].textContent || a[i].innerText;
+        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+            a[i].style.display = "";
+        } else {
+            a[i].style.display = "none";
+        }
+    }
+}
+
+
+
+/**
+ * Close the dropdown if the user clicks outside of it
+ */
+
+document.addEventListener("click", function(event){
+    if(!event.target.matches('.dropbtn-span, .dropbtn-img, .cc-dropbtn, .currency-option--send, .currency-option--receieve, .currency-options-search')){
+
+        let closeReceiveMenu = document.getElementById("currency-options--receive");
+        let closeSendMenu = document.getElementById("currency-options--send");
+
+        if(closeSendMenu.classList.contains('open') ){
+            closeSendMenu.classList.remove('open');
+            clearSearchS();
+        }
+
+        if(closeReceiveMenu.classList.contains('open') ){
+            closeReceiveMenu.classList.remove('open');
+            clearSearchR();
+        }
+
+        let clearSearchSend = document.getElementById("currency-options-search--send");
+        clearSearchSend.value = "";
+
+        let clearSearchReceive = document.getElementById("currency-options-search--receive");
+        clearSearchReceive.value = "";
+        $('.cc-money-input').removeClass('red_border');
+        $('.currency-option--send').removeClass('focused');
+        $('.currency-option--receieve').removeClass('focused');
+        $('#currency-options-search--send, #currency-options-search--receive').val('');
+        filterFunction();
+        filterFunctionReceive();
+    }
+
+
+});
+
+
+function clearSearchS(){
+
+    div = document.getElementById('currency-options--send');
+    a = div.getElementsByTagName("a");
+    for (i = 0; i < a.length; i++) {
+        txtValue = a[i].textContent || a[i].innerText;
+        a[i].style.display = "";
+    }
+}
+
+function clearSearchR(){
+
+    div = document.getElementById('currency-options--receive');
+    a = div.getElementsByTagName("a");
+    for (i = 0; i < a.length; i++) {
+        txtValue = a[i].textContent || a[i].innerText;
+        a[i].style.display = "";
+    }
+}
+
+$(document).on('keydown', '.currency-options', function (event) {
+    var dropdown = $(this);
+    var focused_option = $($(this).find('.currency-items-wrapper .currency-option--send:focus')[0] || $(this).find('.currency-items-wrapper .currency-option--receieve:focus')[0]);
+    var visible_options = dropdown.find('.currency-items-wrapper .currency-option--send:visible, .currency-items-wrapper .currency-option--receieve:visible'); // Get only the visible options
+
+    // Space or Enter
+    // if (event.keyCode == 32 || event.keyCode == 13) {
+    if (event.keyCode == 13) {
+        if (dropdown.hasClass('open')) {
+            let clickEvent = new MouseEvent( 'click', {
+                bubbles: true,
+                cancelable: true
+            });
+            if(focused_option.length>0) {
+                focused_option[0].dispatchEvent(clickEvent);
+            }
+        }
+        return false;
+        // Down
+    } else if (event.keyCode == 40) {
+        if (!dropdown.hasClass('open')) {
+            dropdown.trigger('click');
+        } else {
+            var next_option = focused_option.nextAll('.currency-option--send:visible, .currency-option--receieve:visible').first();
+            if (next_option.length === 0) {
+                next_option = visible_options.first();
+            }
+            focused_option.removeClass('focused');
+            next_option.addClass('focused');
+            next_option.focus();
+        }
+        return false;
+        // Up
+    } else if (event.keyCode == 38) {
+        if (!dropdown.hasClass('open')) {
+            dropdown.trigger('click');
+        } else {
+            var prev_option = focused_option.prevAll('.currency-option--send:visible, .currency-option--receieve:visible').first();
+            if (prev_option.length === 0) {
+                prev_option = visible_options.last();
+            }
+            focused_option.removeClass('focused');
+            prev_option.addClass('focused');
+            prev_option.focus();
+        }
+        return false;
+        // Esc
+    } else if (event.keyCode == 27) {
+        if (dropdown.hasClass('open')) {
+            dropdown.trigger('click');
+        }
+        return false;
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Cross button for pair error
+ */
+const pairError = document.querySelector('.pairs-warnings svg');
+
+if( pairError ) {
+    pairError.addEventListener("click", function(event){
+        document.getElementById("currency-pairs-error").style.display = 'none';
+    });
+}
+
+/**
+ * Rate conversion removes loader + change the color
+ */
+let currencyPairsError = document.getElementById("currency-pairs-error");
+
+if (currencyPairsError && currencyPairsError.innerHTML !== "") {
+    let loader = document.getElementById("loading");
+    let xrBuyAmount = document.getElementById("xr-buy-amount");
+    let ccexRate = document.querySelector(".ccex-rate");
+    let ccDisclaimer = document.querySelector(".cc-disclaimer");
+
+    loader.classList.remove("display");
+    xrBuyAmount.classList.remove("hidden");
+    ccexRate.classList.add("c-grey");
+    ccDisclaimer.style.display = "none";
+}

@@ -1,0 +1,54 @@
+/*
+ * click control for submenu in Mobile
+ */
+(function () {
+  let currentUrl = window.location.href;
+  let url = new URL(currentUrl);
+  let pathname = url.pathname;
+  let pathArray = pathname.split('/');
+
+  if(pathArray.length > 2) {
+    let lastParameter = pathArray[pathArray.length - 2];
+
+    if(lastParameter) {
+      let parentElement = document.getElementById(lastParameter)
+      if (parentElement !== null) {
+        parentElement.querySelector('a').classList.add('highlighted_item');
+      }
+    }
+  }
+
+  const navMenu = document.querySelectorAll(
+    ".wf-mobile-menu .mobile-dropdown > a"
+  );
+
+  const handleToggle = document.getElementById('wf-mobile-menu');
+  if ( handleToggle ) {
+    handleToggle.addEventListener('click', function() {
+      if (document && document.body) {
+        if(document.body.style.overflow !== 'hidden') {
+          document.body.style.overflow = 'hidden';
+        } else {
+          document.body.style.overflow = '';
+        }
+      }
+    });
+  }
+
+  for (const nav of navMenu) {
+    nav.addEventListener("click", function (e) {
+      const target = e.target;
+      e.preventDefault();
+      e.stopPropagation();
+      if (target && target.nextElementSibling) {
+        if (target.classList.contains("highlighted")) {
+          target.classList.remove("highlighted");
+          target.nextElementSibling.style.display = "none";
+        } else {
+          target.classList.add("highlighted");
+          target.nextElementSibling.style.display = "block";
+        }
+      }
+    });
+  }
+})();

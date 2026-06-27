@@ -1,0 +1,24 @@
+window.addEventListener('load', function(event) {
+    const $ = window.jQuery;
+
+    function disable_brand_touch() {
+        const imageCarousel = $('.elementor-image-carousel-wrapper');
+        const swiperInstance = imageCarousel.data('swiper');
+        if ( swiperInstance ) {
+            swiperInstance.allowTouchMove = false;
+        }
+
+        const myElement = document.querySelector('.elementor-image-carousel-wrapper');
+        if ( myElement ) {
+            myElement.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+            });
+        }
+    }
+
+    if (typeof Swiper !== 'undefined' && document.querySelector('.elementor-image-carousel-wrapper')) {
+        disable_brand_touch();
+    }
+
+    window.addEventListener('resize', disable_brand_touch);
+});

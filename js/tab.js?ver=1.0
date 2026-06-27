@@ -1,0 +1,50 @@
+window.addEventListener('DOMContentLoaded', function (event) {
+    function getEle(id) {
+        return document.getElementById(id);
+    }
+
+    let step_1 = getEle('step_1');
+    let step_2 = getEle('step_2');
+    let step_3 = getEle('step_3');
+    let step_content_1 = getEle('step_content_1');
+    let step_content_2 = getEle('step_content_2');
+    let step_content_3 = getEle('step_content_3');
+    if (step_1) {
+        step_1.classList.add('active');
+
+        step_1.addEventListener('click', function (e) {
+            e.preventDefault();
+            step_2 && step_2.classList.remove('active');
+            step_3 && step_3.classList.remove('active');
+            step_1.classList.add('active');
+
+            step_content_2 && step_content_2.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_3 && step_content_3.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_1 && step_content_1.classList.remove('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+        })
+    }
+    if (step_2) {
+        step_2.addEventListener('click', function (e) {
+            e.preventDefault();
+            step_1 && step_1.classList.remove('active');
+            step_3 && step_3.classList.remove('active');
+            step_2.classList.add('active');
+    
+            step_content_1 && step_content_1.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_3 && step_content_3.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_2 && step_content_2.classList.remove('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+        })
+    }
+    if (step_3) {
+        step_3.addEventListener('click', function (e) {
+            e.preventDefault();
+            step_1 && step_1.classList.remove('active');
+            step_2 && step_2.classList.remove('active');
+            step_3.classList.add('active');
+
+            step_content_1 && step_content_1.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_2 && step_content_2.classList.add('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+            step_content_3 && step_content_3.classList.remove('elementor-hidden-desktop','elementor-hidden-tablet','elementor-hidden-mobile');
+        })
+    }
+});

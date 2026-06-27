@@ -1,0 +1,400 @@
+(function () {
+    'use strict';
+
+    var root = document.getElementById('wfcc-v4-root');
+    if (!root || typeof chartParamsV4 === 'undefined') {
+        return;
+    }
+
+    var params = chartParamsV4;
+
+    /* ── DOM refs ──────────────────────────────────── */
+
+    var rateValue = document.getElementById('wfcc-v4-rate-value');
+    var rateLoading = document.getElementById('wfcc-v4-rate-loading');
+    var rateChangeEl = document.getElementById('wfcc-v4-rate-change');
+    var rateChangeIconEl = document.getElementById('wfcc-v4-rate-change-icon');
+    var rateChangeTextEl = document.getElementById('wfcc-v4-rate-change-text');
+    var chartDom = document.getElementById('wfcc-v4-rate-chart');
+    var errorNotice = document.getElementById('wfcc-v4-error-notice');
+
+    var currentDays = params.chartDays || 7;
+    var echartsInstance = null;
+
+    /* ── Utility ───────────────────────────────────── */
+
+    function getSendCurrency() {
+        return (params.sellCurrency || 'GBP').toUpperCase();
+    }
+
+    function getBuyCurrency() {
+        return (params.buyCurrency || 'USD').toUpperCase();
+    }
+
+    /* ── Y-axis scale calculation ─────────────────── */
+
+    /**
+     * Calculate nice Y-axis min, max and interval for the chart.
+     *
+     * Rules (per design requirement):
+     *  - Y-axis labels always show 2 decimal places.
+     *  - When data varies only at 3rd/4th decimal (tightly clustered),
+     *    zoom out to differentiate at 2nd decimal level.
+     *  - Always aim for 3 tick labels (bottom, middle, top).
+     *
+     * Examples:
+     *  - 1.3283–1.3314 → step 0.05 → ticks 1.30, 1.35, 1.40
+     *  - 1.0000–1.9999 → step 0.50 → ticks 1.00, 1.50, 2.00
+     *  - 210.00–219.99 → step 5.00 → ticks 210.00, 215.00, 220.00
+     */
+    function calculateNiceYAxis(dataMin, dataMax) {
+        var range = dataMax - dataMin;
+
+        // Handle edge case: all values are the same
+        if (range < 1e-10) {
+            var absVal = Math.max(Math.abs(dataMin), 0.01);
+            range = absVal * 0.01;
+            dataMin = dataMin - range / 2;
+            dataMax = dataMax + range / 2;
+        }
+
+        var absMid = Math.max(Math.abs((dataMin + dataMax) / 2), 1e-10);
+        var magnitude = Math.pow(10, Math.floor(Math.log10(absMid)));
+
+        var step;
+
+        // Check whether 2-decimal labels would be visually indistinguishable.
+        // Count how many distinct 0.01-wide slots the data range spans.
+        // If fewer than 3, the auto-generated tick labels would collide
+        // (e.g. eight labels all showing "1.33"), so we must zoom out.
+        var distinctSlots = Math.ceil(dataMax * 100) - Math.floor(dataMin * 100);
+
+        if (distinctSlots < 3) {
+            // Tightly clustered — zoom out to 2nd-decimal level.
+            // magnitude=1 → step=0.05; magnitude=100 → step=5
+            step = magnitude * 0.05;
+        } else {
+            // Enough variation for 2-decimal labels — standard nice-number algorithm
+            // targeting 3 ticks (2 intervals).
+            var roughStep = range / 2;
+            var exp = Math.floor(Math.log10(roughStep));
+            var pow10 = Math.pow(10, exp);
+            var frac = roughStep / pow10;
+            if (frac <= 1)      { step = pow10; }
+            else if (frac <= 2) { step = 2 * pow10; }
+            else if (frac <= 5) { step = 5 * pow10; }
+            else                { step = 10 * pow10; }
+        }
+
+        // Ensure step is not smaller than 0.01 so 2-decimal labels are always distinct
+        if (step < 0.01) { step = 0.01; }
+        if (step <= 0) { step = 0.01; }
+
+        // Round data bounds to the nearest step (floor for min, ceil for max)
+        var niceMin = Math.floor(dataMin / step) * step;
+        var niceMax = Math.ceil(dataMax / step) * step;
+
+        // Fix floating-point rounding errors
+        niceMin = parseFloat(niceMin.toFixed(10));
+        niceMax = parseFloat(niceMax.toFixed(10));
+
+        // Ensure at least 2 intervals (3 tick labels)
+        var intervals = Math.round((niceMax - niceMin) / step);
+        if (intervals < 2) {
+            niceMax = parseFloat((niceMin + 2 * step).toFixed(10));
+        }
+
+        return { min: niceMin, max: niceMax, interval: step };
+    }
+
+    /* ── Rate change indicator ────────────────────── */
+
+    function updateRateChangeIndicator(historicalRates) {
+        if (!rateChangeEl || !rateChangeIconEl || !rateChangeTextEl) { return; }
+
+        if (!Array.isArray(historicalRates) || historicalRates.length < 2) {
+            // 数据不足时不隐藏，保持显示初始的"No change"
+            return;
+        }
+
+        var firstPrice = Number(historicalRates[0].quotePrice);
+        var lastPrice = Number(historicalRates[historicalRates.length - 1].quotePrice);
+
+        if (!firstPrice || firstPrice === 0) {
+            // 数据无效时不隐藏，保持显示初始的"No change"
+            return;
+        }
+
+        var percentChange = ((lastPrice - firstPrice) / firstPrice) * 100;
+        var absPercent = Math.abs(percentChange).toFixed(2);
+
+        rateChangeEl.style.display = 'flex';
+
+        if (percentChange > 0) {
+            rateChangeEl.className = 'wfcc-v4__rate-change wfcc-v4__rate-change--up';
+            rateChangeIconEl.innerHTML = '<polygon points="5,0 10,10 0,10" fill="currentColor"/>';
+            rateChangeTextEl.textContent = 'Up by ' + absPercent + '%';
+        } else if (percentChange < 0) {
+            rateChangeEl.className = 'wfcc-v4__rate-change wfcc-v4__rate-change--down';
+            rateChangeIconEl.innerHTML = '<polygon points="0,0 10,0 5,10" fill="currentColor"/>';
+            rateChangeTextEl.textContent = 'Down by ' + absPercent + '%';
+        } else {
+            rateChangeEl.className = 'wfcc-v4__rate-change';
+            rateChangeIconEl.innerHTML = '';
+            rateChangeTextEl.textContent = '0.00%';
+        }
+    }
+
+    /* ── Rate request ──────────────────────────────── */
+
+    function showLoading(show) {
+        if (rateLoading) { rateLoading.style.display = show ? 'inline-block' : 'none'; }
+    }
+
+    function showError(show) {
+        if (errorNotice) { errorNotice.style.display = show ? 'flex' : 'none'; }
+    }
+
+    async function fetchRate() {
+        var body = JSON.stringify({
+            buyCurrency: getBuyCurrency(),
+            sellCurrency: getSendCurrency(),
+            partnerId: params.partnerId,
+            region: params.region,
+            campaignName: params.campaignName
+        });
+
+        showLoading(true);
+        showError(false);
+
+        try {
+            var response = await fetch(params.apiUrl, {
+                method: 'POST',
+                body: body,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) { throw new Error('Rate request failed'); }
+            var data = await response.json();
+            var rate = data && data.rateList && data.rateList[0] ? Number(data.rateList[0].rate) : 0;
+            if (rate <= 0) { throw new Error('Invalid rate'); }
+            if (rateValue) { rateValue.textContent = rate.toFixed(4); }
+        } catch (err) {
+            if (rateValue) { rateValue.textContent = '0.0000'; }
+            if (window.console && window.console.error) { window.console.error(err); }
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    /* ── History request ───────────────────────────── */
+
+    async function fetchRateHistory(days) {
+        if (!chartDom) { return; }
+
+        showChartLoading(true);
+
+        var body = JSON.stringify({
+            buyCurrency: getBuyCurrency(),
+            sellCurrency: getSendCurrency(),
+            chartDays: days,
+            partnerId: params.partnerId,
+            region: params.region,
+            campaignName: params.campaignName,
+            isProd: params.isProd || 'N'
+        });
+
+        try {
+            var response = await fetch(params.chartHistoryApiUrl, {
+                method: 'POST',
+                body: body,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) { throw new Error('History request failed'); }
+            var data = await response.json();
+            renderChart(data);
+        } catch (err) {
+            renderChartError();
+            if (window.console && window.console.error) { window.console.error(err); }
+        } finally {
+            showChartLoading(false);
+        }
+    }
+
+    /* ── ECharts ───────────────────────────────────── */
+
+    function showChartLoading(show) {
+        if (echartsInstance) {
+            if (show) { echartsInstance.showLoading('default', { text: '', color: '#AA8DCC', maskColor: 'rgba(255,255,255,0.8)' }); }
+            else { echartsInstance.hideLoading(); }
+        }
+    }
+
+    function initChart() {
+        if (!chartDom || typeof echarts === 'undefined') {
+            renderChartError();
+            return;
+        }
+        echartsInstance = echarts.init(chartDom);
+        window.addEventListener('resize', function () {
+            if (echartsInstance) { echartsInstance.resize(); }
+        });
+    }
+
+    function renderChart(data) {
+        if (!echartsInstance) { return; }
+
+        var historicalRates = (data && data.historicalRates) ? data.historicalRates : [];
+
+        var points = [];
+        for (var i = 0; i < historicalRates.length; i++) {
+            var item = historicalRates[i];
+            var time = item.time;
+            var price = Number(item.quotePrice);
+            if (time && Number.isFinite(price)) {
+                points.push([time, price]);
+            }
+        }
+
+        if (points.length === 0) {
+            renderChartError();
+            return;
+        }
+
+        // Calculate nice Y-axis bounds from data
+        var dataMin = Infinity;
+        var dataMax = -Infinity;
+        for (var j = 0; j < points.length; j++) {
+            var priceVal = points[j][1];
+            if (priceVal < dataMin) { dataMin = priceVal; }
+            if (priceVal > dataMax) { dataMax = priceVal; }
+        }
+        var yAxisBounds = calculateNiceYAxis(dataMin, dataMax);
+
+        var option = {
+            grid: { left: 60, right: 50, top: 30, bottom: 30 },
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: '#fff',
+                borderColor: '#eee',
+                borderWidth: 1,
+                textStyle: { color: '#1F2323', fontSize: 12 },
+                formatter: function (params) {
+                    if (!params || !params.length) { return ''; }
+                    var p = params[0];
+                    var d = new Date(p.value[0]);
+                    var dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    var timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                    return '<div style="text-align:center">' +
+                        '<div style="margin-bottom:4px">' + dateStr + ' ' + timeStr + '</div>' +
+                        '<div style="font-weight:600">' + getSendCurrency() + '/' + getBuyCurrency() + ' ' + Number(p.value[1]).toFixed(4) + '</div>' +
+                        '</div>';
+                }
+            },
+            xAxis: {
+                type: 'time',
+                axisLabel: { show: false },
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: false }
+            },
+            yAxis: {
+                type: 'value',
+                min: yAxisBounds.min,
+                max: yAxisBounds.max,
+                interval: yAxisBounds.interval,
+                axisLabel: {
+                    color: '#13002D',
+                    fontSize: 11,
+                    formatter: function (value) { return value.toFixed(2); }
+                },
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { lineStyle: { color: '#F0F0F0', type: 'solid' } }
+            },
+            series: [{
+                type: 'line',
+                data: points,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 8,
+                showSymbol: false,
+                lineStyle: { width: 2, color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: '#AA8DCC' },
+                    { offset: 1, color: '#F42E6D' }
+                ]) },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgba(170, 141, 204, 0.15)' },
+                        { offset: 1, color: 'rgba(244, 46, 109, 0.02)' }
+                    ])
+                },
+                emphasis: {
+                    focus: 'series',
+                    itemStyle: {
+                        color: '#AA8DCC',
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    }
+                }
+            }]
+        };
+
+        echartsInstance.setOption(option, true);
+
+        updateRateChangeIndicator(historicalRates);
+    }
+
+    function renderChartError() {
+        if (echartsInstance) {
+            echartsInstance.setOption({
+                title: {
+                    text: 'Rate history unavailable',
+                    left: 'center',
+                    top: 'center',
+                    textStyle: { color: '#90969A', fontSize: 14, fontWeight: 400 }
+                },
+                xAxis: { show: false },
+                yAxis: { show: false },
+                series: []
+            }, true);
+        } else if (chartDom) {
+            chartDom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#90969A;font-size:14px;">Rate history unavailable</div>';
+        }
+        // API失败时不隐藏，保持显示初始的"No change"
+    }
+
+    /* ── Time range buttons ────────────────────────── */
+
+    function setActiveDay(days) {
+        currentDays = days;
+        var btns = root.querySelectorAll('.wfcc-v4__time-btn');
+        for (var i = 0; i < btns.length; i++) {
+            var d = parseInt(btns[i].getAttribute('data-days'), 10);
+            if (d === days) {
+                btns[i].classList.add('wfcc-v4__time-btn--active');
+            } else {
+                btns[i].classList.remove('wfcc-v4__time-btn--active');
+            }
+        }
+    }
+
+    function bindTimeButtons() {
+        var btns = root.querySelectorAll('.wfcc-v4__time-btn');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].addEventListener('click', function () {
+                var days = parseInt(this.getAttribute('data-days'), 10);
+                if (days === currentDays) { return; }
+                setActiveDay(days);
+                fetchRateHistory(days);
+            });
+        }
+    }
+
+    /* ── Init ──────────────────────────────────────── */
+
+    initChart();
+    bindTimeButtons();
+    fetchRate();
+    fetchRateHistory(currentDays);
+
+})();

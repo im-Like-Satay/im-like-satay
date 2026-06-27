@@ -1,0 +1,258 @@
+function containsSpecialChars(str) {
+       const specialChars =
+         /[`!@#$%^&*()+\-=\[\]{};':"\\|,.<>\/?~]/;
+       if (specialChars.test(str)){   
+         return;
+       } else {
+         return str;
+       }
+}
+
+async function sendData(url, httpMethod, bodyData) {
+
+	var response = await fetch(url,{
+                     method: httpMethod,
+                     body: bodyData,
+                     headers: {
+                       "content-Type": "application/json",
+                       }
+		}
+
+	);
+
+	if (!response.ok) {
+		throw new Error(`HTTP error! status: ${response.status}`);
+	}
+	var text = await response.text();
+	if (!text) {
+		throw new Error('Empty response from rate API');
+	}
+	var data;
+	try {
+		data = JSON.parse(text);
+	} catch (e) {
+		throw new Error('Invalid JSON from rate API');
+	}
+
+       return data;
+
+}
+
+function exchangeRate(baseRate, buyCurrency, sellCurrency){
+
+       const xrBuyAmount = document.getElementById("xr-buy-amount");
+       const xrSellCurrency = document.getElementById("xr-sell-currency");
+       const xrBuyCurrency = document.getElementById("xr-buy-currency");
+
+       const loader = document.getElementById("loading");
+       loader && loader.classList.remove("display");
+       xrBuyAmount && xrBuyAmount.classList.remove("hidden");
+
+       xrBuyAmount.textContent=baseRate.toFixed(4);;
+
+}
+
+
+function buildCallData() {
+
+       let beSendCurrency    = iRParams.sendCurrencyParam;
+       let beReceiveCurrency = iRParams.buyCurrencyParam;
+
+       const ccQueryString = window.location.search;
+       const ccUrlParams = new URLSearchParams(ccQueryString);
+       const sendCurrencyParams = ccUrlParams.get('send');
+       const receiveCurrencyParams = ccUrlParams.get('receive');
+
+       if(sendCurrencyParams){
+              beSendCurrency = sendCurrencyParams.toUpperCase();
+       }
+
+       if(receiveCurrencyParams){
+              beReceiveCurrency = receiveCurrencyParams.toUpperCase();
+       }
+
+       var sendSelector = document.getElementById("currency-selector--send");
+       var receiveSelector = document.getElementById("currency-selector--receive");
+       if(sendSelector){
+              var sendCurrency = sendSelector.getAttribute('data-currency');
+              if(sendCurrency){
+                     beSendCurrency = sendCurrency.toUpperCase();
+              }
+       }
+       if(receiveSelector){
+              var receiveCurrency = receiveSelector.getAttribute('data-currency');
+              if(receiveCurrency){
+                     beReceiveCurrency = receiveCurrency.toUpperCase();
+              }
+       }
+
+       let campaignName = iRParams.campaignName;
+       let partnerId    = iRParams.partnerId;
+       let region       = iRParams.region;
+
+       containsSpecialChars(beSendCurrency);
+       containsSpecialChars(beReceiveCurrency);
+       containsSpecialChars(campaignName);
+       containsSpecialChars(partnerId);
+       containsSpecialChars(region);
+
+       var contents ={
+            "buyCurrency": beSendCurrency,
+            "sellCurrency": beReceiveCurrency,
+            "partnerId": partnerId,
+            "region": region,
+            "campaignName": campaignName
+       }
+
+       const bodyData = JSON.stringify(contents);
+
+       getInquiry = sendData(iRParams.apiUrl,'POST',bodyData);
+
+}
+
+var _rateListenersBound = false;
+
+function applyRateAndBindListeners(baseRate) {
+
+       exchangeRate(baseRate);
+
+       const sendAmount     = document.querySelector("#source-input");
+       const receiveAmount  = document.querySelector("#receive-input");
+
+       let currentSendAmount = removeCommas(sendAmount.value);
+       let calculateReceiveAmount = currentSendAmount * baseRate;
+       let setReceiveAmount  = add_commas(calculateReceiveAmount);
+       receiveAmount.value = setReceiveAmount;
+
+       if (_rateListenersBound) return;
+       _rateListenersBound = true;
+
+       var activeRate = baseRate;
+
+       let oldSendAmount = sendAmount.value;
+       sendAmount.addEventListener("input", (event) => {
+
+              if (event.isComposing || event.keyCode === 229) {
+                     return;
+              }
+
+              if(/^[0-9\,\.\/]*$/.test(sendAmount.value)){
+                     sendAmount && sendAmount.classList.remove("input-error");
+                     sendAmount.setCustomValidity("");
+                     oldSendAmount = sendAmount.value;
+
+              }else {
+                     sendAmount && sendAmount.classList.add("input-error");
+                     sendAmount.setCustomValidity('');
+                     sendAmount.reportValidity();
+                     sendAmount.value = oldSendAmount;
+              }
+
+              let sendAmountValue = removeCommas(sendAmount.value);
+
+              if(iRParams.promo){
+                     displayCalculatorSection(sendAmountValue, buytier_0_lower_value);
+              }
+
+              exchangeRate(activeRate);
+              let newReceiveAmountValue = activeRate  * sendAmountValue;
+              let newReceiveAmountValueCommas = add_commas(newReceiveAmountValue);
+              receiveAmount.value = newReceiveAmountValueCommas;
+       });
+
+       let oldReceiveAmount = receiveAmount.value;
+       receiveAmount.addEventListener("input", (event) => {
+              if (event.isComposing || event.keyCode === 229) {
+                     return;
+              }
+
+              if(/^[0-9\,\.\/]*$/.test(receiveAmount.value)){
+
+                     receiveAmount && receiveAmount.classList.remove("input-error");
+                     receiveAmount.setCustomValidity("");
+                     oldReceiveAmount = receiveAmount.value;
+
+              }else {
+                     receiveAmount && receiveAmount.classList.add("input-error");
+                     receiveAmount.setCustomValidity('');
+                     receiveAmount.reportValidity();
+                     receiveAmount.value = oldReceiveAmount;
+              }
+              exchangeRate(baseRate);
+              let receievAmountValue = removeCommas(receiveAmount.value);
+              let newSendAmountValue = receievAmountValue/baseRate
+              let newSendAmountValueCommas = add_commas(newSendAmountValue);
+
+              sendAmount.value = newSendAmountValueCommas;
+
+       });
+}
+
+function displayCalculatorSection(sendAmountValue, buytier_1_lower_value){
+
+       const calculatorPromoTitle = document.getElementById("calculator-promo-title");
+       const calculatorPromoSubTitle = document.getElementById("calculator-promo-subtitle");
+       const calculatorTitle = document.getElementById("calculator-title");
+       const calculatorSubTitle = document.getElementById("calculator-subtitle");
+       const calculatorSection = document.getElementById("calculator-promo-section");
+
+       calculatorSection.style.display = "block";
+       calculatorPromoTitle.style.display = "block";
+       calculatorPromoSubTitle.style.display = "block";
+       calculatorTitle.style.display = "none";
+       calculatorSubTitle.style.display = "none";
+
+       if (sendAmountValue  >= buytier_1_lower_value){
+
+              calculatorSection.style.display = "block";
+              calculatorPromoTitle.style.display = "block";
+              calculatorPromoSubTitle.style.display = "block";
+              calculatorTitle.style.display = "none";
+              calculatorSubTitle.style.display = "none";
+       } else {
+              calculatorSection.style.display = "none";
+
+              calculatorPromoTitle.style.display = "none";
+              calculatorPromoSubTitle.style.display = "none";
+              calculatorTitle.style.display = "block";
+              calculatorSubTitle.style.display = "block";
+       }
+}
+
+
+function add_commas(num) {
+
+  let addDec = Number(num).toFixed(2);
+
+  return addDec.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function removeCommas(value){
+
+       let removeComma = value.replace(/\,/g,'');
+       let makeNum = Number(removeComma);
+       return makeNum;
+
+}
+
+const hasCurrencyPairsError = document.getElementById('currency-pairs-error');
+
+if (!hasCurrencyPairsError) {
+       buildCallData();
+       (async function() {
+              try {
+                     const currentInquiry = await getInquiry;
+                     if (currentInquiry && currentInquiry.rateList && currentInquiry.rateList[0]) {
+                            applyRateAndBindListeners(currentInquiry.rateList[0].rate);
+                     }
+              } catch (e) {
+                     if (window.console && window.console.error) {
+                            console.error('Currency converter rate error:', e);
+                     }
+              }
+       })();
+}
+
+window.addEventListener('load', (event) => {
+       const sendAmount = document.querySelector("#source-input");
+       sendAmount && sendAmount.dispatchEvent(new Event('input', { bubbles: true }));
+});
